@@ -5,7 +5,7 @@ pragma solidity 0.8.25;
 import {Test,console} from "forge-std/Test.sol";
 import {BagelToken} from "../src/BagelToken.sol";
 import {MerkleAirdrop} from "../src/MerkleAirdrop.sol";
-import {ZkSyncChainChecker} from "lib/foundry-devops/src/ZkSyncChainChecker.sol";
+import {ZkSyncChainChecker} from "lib/foundry-devops/src/ZkSyncChainChecker.sol"; // not really used zksync throughout the project tho
 import {DeployMerkleAirdrop} from "../script/DeployMerkleAirdrop.s.sol";
 
 contract TestMerkleAirdrop is ZkSyncChainChecker, Test{
@@ -14,6 +14,7 @@ contract TestMerkleAirdrop is ZkSyncChainChecker, Test{
     DeployMerkleAirdrop deployer;
     address user;
     uint256 userPrivKey;
+    address gasPayer;
 
     bytes32 public constant ROOT = 0xaa5d581231e596618465a56aa0f5870ba6e20785fe436d5bfb82b08662ccc7c4;
     uint256 public amountToWithdraw = 25 * 1e18;
@@ -32,14 +33,18 @@ contract TestMerkleAirdrop is ZkSyncChainChecker, Test{
         airdrop = new MerkleAirdrop(ROOT,token);
         token.mint(address(airdrop), initialContractBalance);
         (user,userPrivKey) = makeAddrAndKey("user");
+        gasPayer = makeAddr("gasPayer");
     } 
 
     function testUserCanClaim() public{
         uint256 startingBalance = token.balanceOf(user);
+        bytes32 digest = airdrop.getMessageHash(user , amountToWithdraw);
 
-        vm.startPrank(user);
-        airdrop.claim(user , amountToWithdraw , PROOF);
-        vm.stopPrank();
+        // user signs the message
+        (uint8 v , bytes32 r , bytes32 s ) = vm.sign(userPrivKey,digest);
+
+        vm.prank(gasPayer);
+        airdrop.claim(user , amountToWithdraw , PROOF , v , r , s);
 
         uint256 endingBalance = token.balanceOf(user);
         console.log("Ending user balance ", endingBalance);
